@@ -6,6 +6,7 @@
 #include <fcntl.h>
 
 #include <filesystem>
+#include <span>
 #include <stdexcept>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -29,6 +30,8 @@ struct Fd {
 
 using namespace detail;
 
+// right now, this MappedFile should only be used for reading a file.
+// not for writing.
 class MappedFile {
 public:
   MappedFile(const std::filesystem::path &path) {
@@ -54,19 +57,16 @@ public:
 
     madvise(addr, size, MADV_SEQUENTIAL);
 
-    data_ = static_cast<std::byte *>(addr);
+    bytes_ = {static_cast<std::byte *>(addr), size};
     size_ = size;
   }
 
-  std::byte *data() const { return data_; }
-
-  std::size_t size() const { return size_; }
+  std::span<const std::byte> bytes() const noexcept { return bytes_; }
 
   ~MappedFile() {
-    if (data_ != nullptr) {
-      ::munmap(data_, size_);
+    if (!bytes_.empty()) {
+      ::munmap(bytes_.data(), bytes_.size());
     }
-    data_ = nullptr;
     size_ = 0;
   }
 
@@ -77,7 +77,7 @@ public:
   MappedFile &operator=(MappedFile &&) = delete;
 
 private:
-  std::byte *data_{nullptr};
+  std::span<std::byte> bytes_{};
   std::size_t size_{};
 };
 
